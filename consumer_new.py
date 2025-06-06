@@ -26,7 +26,7 @@ def consume_messages():
         data = message.value
         with messages_lock:
             messages.append(data)
-            if len(messages) > 10000:
+            if len(messages) > 100000:  # duży bufor bezpieczeństwa
                 messages.pop(0)
 
 def render_folium_map(df, param_name):
@@ -71,7 +71,6 @@ def dashboard():
     if df.empty or "city" not in df.columns or "paramName" not in df.columns:
         return "<h2>Brak danych lub nieprawidłowa struktura wiadomości!</h2>"
 
-    # LISTA MIAST i parametrów
     miasta = sorted(df["city"].dropna().unique())
     miasta = ["Cała Polska"] + miasta
     miasto = request.args.get("city", miasta[0])
@@ -79,17 +78,15 @@ def dashboard():
     parametry = sorted(df["paramName"].dropna().unique())
     parametr = request.args.get("param", parametry[0])
 
-    # FILTROWANIE wg miasta i parametru
+    # FILTROWANIE wg miasta i parametru (ale BRAK deduplikacji, bierzemy wszystko)
     if miasto == "Cała Polska":
         df_city = df[df["paramName"] == parametr].copy()
     else:
         df_city = df[(df["city"] == miasto) & (df["paramName"] == parametr)].copy()
-    df_city = df_city.sort_values("date")
+    df_city = df_city.sort_values("date")  # cała historia
 
-    # MAPA folium
     mapa_html = render_folium_map(df_city, parametr)
 
-    # WYKRES czasowy
     wykres_html = "<b>Brak danych do wykresu.</b>"
     if not df_city.empty and "date" in df_city.columns and "value" in df_city.columns:
         try:
@@ -109,10 +106,9 @@ def dashboard():
         except Exception as e:
             wykres_html = f"<b>Błąd rysowania wykresu: {e}</b>"
 
-    # TABELA z sortowaniem (DataTables)
+    # TABELA – pokazuje WSZYSTKO (możesz usunąć .head(20), tabela będzie bardzo długa!)
     tabela_html = df_city[["stationName", "date", "value", "paramName"]] \
         .sort_values("date", ascending=False) \
-        .head(20) \
         .to_html(index=False, classes="display", table_id="ostatnie")
 
     return render_template_string('''
@@ -156,7 +152,7 @@ def dashboard():
             <div class="side">
                 <div class="box">{{ wykres_html|safe }}</div>
                 <div class="box">
-                    <h3>Ostatnie pomiary</h3>
+                    <h3>Wszystkie pomiary z wybranego miasta</h3>
                     {{ tabela_html|safe }}
                 </div>
             </div>
